@@ -93,9 +93,16 @@ class Router:
         outroutes = []
         return outroutes
 
-    def filter_relationships(self, srcif, routes):
+    def filter_relationships(self, recRelation, routes):
         """ Don't allow Peer->Peer, Peer->Prov, or Prov->Peer forwards """
         outroutes = []
+        if recRelation is CUST: 
+            return routes 
+        for val in routes: 
+            ip = val["peer"]
+            relation = self.relations[ip] 
+            if relation is CUST: 
+                outroutes.append(val)
         return outroutes
 
     def get_route(self, srcif, daddr):
@@ -121,8 +128,14 @@ class Router:
 
     def forward(self, srcif, packet):
         """	Forward a data packet	"""
-        # TODO
-        return False
+        # TODO: will need to massively update this 
+        print("PACKET FROM DATA: {0}".format(packet))
+        print("ROUTING TABLE IS: {0}".format(self.routes))
+        print("SRCIF IS: {0}".format(srcif))
+        dest = packet["dst"]
+        self.sockets[dest].send(json.dumps(self.dump(packet)).encode("ascii"))
+        #return may need to be changed 
+        return True
 
     def coalesce(self):
         """	coalesce any routes that are right next to each other	"""
@@ -131,12 +144,16 @@ class Router:
 
     def update(self, srcif, packet):
         """	handle update packets	"""
-        # TODO 
         self.updates.append(packet)
         self.routes.append({"network": packet["msg"]["network"],
                             "netmask": packet["msg"]["netmask"], 
                             "peer": packet["src"]})
-        return False
+        #print("RELATIONS IS HERE: {0}".format(self.relations))
+        relation = packet["src"]
+        recRelation = self.relations[relation]
+        outRoutes = self.filter_relationships(recRelation, self.routes) 
+        #the return true may need to be changed later
+        return True
     
     def revoke(self, packet):
         """	handle revoke packets	"""
@@ -146,26 +163,26 @@ class Router:
     def dump(self, packet):
         """	handles dump table requests	"""
         # TODO
-        print("asdfffffffffffff")
+        #print("asdfffffffffffff")
         src = packet["dst"]
         dst = packet["src"]
         a = {"src": src, "dst": dst, "type": "table", "msg": self.routes}
-        print(a)
+        #print(a)
         return a
 
     def handle_packet(self, srcif, packet):
         """	dispatches a packet """
-        print("pckt type", packet["type"])
+        #print("pckt type", packet["type"])
         # TODO
         if packet["type"] == UPDT:
             success = self.update(srcif, packet)
         elif packet["type"] == DATA:
             success = self.forward(srcif, packet)
         elif packet["type"] == DUMP:
-            print("soijfioseejfioejfojeojw", srcif)
+            #print("soijfioseejfioejfojeojw", srcif)
             #print(self.dump(packet))
             self.sockets[srcif].send(json.dumps(self.dump(packet)).encode("ascii"))
-            print("asdf")
+            #print("asdf")
         elif packet["type"] == RVKE:
             success = self.revoke(packet)
         elif packet["type"] == NRTE:
@@ -181,7 +198,7 @@ class Router:
     def run(self):
         while True:
             socks = select.select(self.sockets.values(), [], [], 0.1)[0]
-            print(socks)
+            #print(socks)
             for conn in socks:
                 try:
                     k = conn.recv(65535)
@@ -193,7 +210,7 @@ class Router:
                     for sock in self.sockets:
                         if self.sockets[sock] == conn:
                             srcif = sock
-                            print(srcif)
+                            #print(srcif)
                     msg = json.loads(k)
                     #print(type(msg))
                     #print(msg)
@@ -204,7 +221,7 @@ class Router:
         return
 
 if __name__ == "__main__":
-    print(args.networks[1:])
+    #print(args.networks[1:])
     as_num = args.networks[0]
     router = Router(args.networks[1:])
     router.run()
