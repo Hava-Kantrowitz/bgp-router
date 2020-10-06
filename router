@@ -67,6 +67,22 @@ class Router:
         """ Lookup all valid routes for an address """
         # TODO
         outroutes = []
+        for entry in self.routes:
+            ip = entry["network"].split(".")
+            netmask = entry["netmask"].split(".")
+            #print("asdfasdfsadfsadfasdf", type(bin(5)))
+
+            mask_bit = "".join([ format(int(quad), "08b") for quad in netmask ])
+            num_ones = mask_bit.count("1")
+            #print("num ones: ", num_ones)
+            ip_bin = "".join([ format(int(quad), "08b") for quad in ip ])
+            ip_start = ip_bin[:num_ones]
+            #print("starttttttttttttttttttttt:", ip_start)
+            daddr_bin = "".join([ format(int(quad), "08b") for quad in daddr.split(".") ])
+            if daddr_bin.startswith(ip_start):
+                outroutes.append(entry)
+
+        print("outroutessssssssssssssssssssss", outroutes)
         return outroutes
 
     def get_shortest_as_path(self, routes):
@@ -131,9 +147,11 @@ class Router:
         # TODO: will need to massively update this 
         print("PACKET FROM DATA: {0}".format(packet))
         print("ROUTING TABLE IS: {0}".format(self.routes))
-        print("SRCIF IS: {0}".format(srcif))
         dest = packet["dst"]
-        self.sockets[dest].send(json.dumps(self.dump(packet)).encode("ascii"))
+        possible_routes = self.lookup_routes(dest)
+        chosen_router = possible_routes[0]["peer"]
+        #TODO implement most specific route and business routes
+        self.sockets[chosen_router].send(json.dumps(packet).encode("ascii"))
         #return may need to be changed 
         return True
 
