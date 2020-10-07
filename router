@@ -47,12 +47,14 @@ class Router:
     updates = None
     relations = None
     sockets = None
+    as_num = None
 
-    def __init__(self, networks):
+    def __init__(self, networks, as_num):
         self.routes = []
         self.updates = []
         self.relations = {}
         self.sockets = {}
+        self.as_num = as_num
         for relationship in networks:
             network, relation = relationship.split("-")
             if DEBUG: 
@@ -183,10 +185,13 @@ class Router:
             #print("OUTROUTES IS HEREEEEEEEEE", outRoutes) 
             #print("ROUTING TABLE IS:", self.routes)
             for val in outRoutes: 
-                #print(val) 
+                #print(val)
+                item["msg"]["ASPath"].append(self.as_num)
                 newpacket = {"src": val["us"], "dst": val["peer"], "type": "update", "msg": item["msg"]}
                 print("THIS IS FOR UPDATE:", json.dumps(newpacket).encode("ascii"))
                 self.sockets[val["peer"]].send(json.dumps(newpacket).encode("ascii"))
+                #asdf = '{"src": "192.168.0.1", "dst": "192.168.0.2", "type": "update", "msg": {"network": "172.168.0.0", "netmask": "255.255.0.0", "localpref": 100, "ASPath": [2], "origin": "EGP", "selfOrigin": true}}'
+                #self.sockets[val["peer"]].send(asdf.encode("ascii"))
             #the return true may need to be changed later
         return True
     
@@ -260,5 +265,5 @@ class Router:
 if __name__ == "__main__":
     #print(args.networks[1:])
     as_num = args.networks[0]
-    router = Router(args.networks[1:])
+    router = Router(args.networks[1:], as_num)
     router.run()
