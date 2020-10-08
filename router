@@ -51,7 +51,7 @@ class Router:
 
     def __init__(self, networks, as_num):
         self.routes = []
-        self.updates = []
+        self.updates = {}
         self.relations = {}
         self.sockets = {}
         self.as_num = as_num
@@ -169,30 +169,26 @@ class Router:
 
     def update(self, srcif, packet):
         """	handle update packets	"""
-        #print("WE ARE IN UPDATE!!") 
-        self.updates.append(packet)
+        #print("WE ARE IN UPDATE!!")
+        packet["msg"]["ASPath"].append(self.as_num) 
+        self.updates[packet["src"]] = packet
         self.routes.append({"network": packet["msg"]["network"],
                             "netmask": packet["msg"]["netmask"], 
                             "peer": packet["src"],
                             "us": packet["dst"]})
-        for item in self.updates: 
-            #print("ITEM IS HEREEEEEEEEEEEEEEEEE:", item)
-            print("OLD PACKET ISSSSS:", packet) 
-            #print("RELATIONS IS HERE: {0}".format(self.relations))
-            relation = item["src"] 
-            recRelation = self.relations[relation]
-            outRoutes = self.filter_relationships(recRelation, self.routes, relation) 
-            #print("OUTROUTES IS HEREEEEEEEEE", outRoutes) 
-            #print("ROUTING TABLE IS:", self.routes)
-            for val in outRoutes: 
-                #print(val)
-                item["msg"]["ASPath"].append(self.as_num)
-                newpacket = {"src": val["us"], "dst": val["peer"], "type": "update", "msg": item["msg"]}
-                print("THIS IS FOR UPDATE:", json.dumps(newpacket).encode("ascii"))
-                self.sockets[val["peer"]].send(json.dumps(newpacket).encode("ascii"))
-                #asdf = '{"src": "192.168.0.1", "dst": "192.168.0.2", "type": "update", "msg": {"network": "172.168.0.0", "netmask": "255.255.0.0", "localpref": 100, "ASPath": [2], "origin": "EGP", "selfOrigin": true}}'
-                #self.sockets[val["peer"]].send(asdf.encode("ascii"))
-            #the return true may need to be changed later
+        
+        relation = packet["src"]
+        recRelation = self.relations[relation]
+        outRoutes = self.filter_relationships(recRelation, self.routes, relation)
+        for item in outRoutes:
+            newpacket = {"src": item["us"], "dst": item["peer"], "type": "update", "msg": packet["msg"]} #sends incoming packet to a peer
+            print("UPDATE TO OUTROUTE:", json.dumps(newpacket).encode("ascii"))
+            self.sockets[item["peer"]].send(json.dumps(newpacket).encode("ascii"))
+            newpacket = {"src": packet["dst"], "dst": packet["src"], "type": "update", "msg": self.updates[item["peer"]]["msg"]} #send peer to incoming packet's router
+            print("UPDATE TO PACKET ROUTER:", json.dumps(newpacket).encode("ascii"))
+            self.sockets[packet["src"]].send(json.dumps(newpacket).encode("ascii"))
+
+        #    #the return true may need to be changed later
         return True
     
     def revoke(self, packet):
