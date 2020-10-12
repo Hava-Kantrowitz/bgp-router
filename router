@@ -94,9 +94,16 @@ class Router:
         return outroutes
             
     def get_highest_preference(self, routes):
-        """ select the route with the shortest AS Path """
+        """ select the route with the highest local pref """
         # TODO
+        prefList = []
+        for val in routes: 
+            prefList.append(self.updates[val["peer"]]["msg"]["localpref"]) 
+        highestVal = max(prefList) 
         outroutes = []
+        for val in routes:
+            if self.updates[val["peer"]]["msg"]["localpref"] == highestVal:
+                outroutes.append(val)
         return outroutes
          
     def get_self_origin(self, routes):
@@ -127,26 +134,36 @@ class Router:
                 outroutes.append(val)
         return outroutes
 
+    def check_route_len(self, routes):
+        if len(routes) == 1:
+            return self.sockets[routes[0]["peer"]]
+        elif len(routes) == 0: 
+            return None
+        return 100
+
     def get_route(self, srcif, daddr):
         """	Select the best route for a given address	"""
         # TODO
-        peer = None
-        routes = lookup_routers(daddr)
-        # Rules go here
-        if routes:
+        print("DADDR IS", daddr) 
+        routes = self.lookup_routes(daddr)
+        print("ROUTES FROM LOOKUP IS", routes)
+        if self.check_route_len(routes) != 100: 
+            return self.check_route_len(routes) 
+        else: 
             # 1. Highest Preference
             routes = self.get_highest_preference(routes)
             # 2. Self Origin
-            routes = self.get_self_origin(routes)
+            #routes = self.get_self_origin(routes)
             # 3. Shortest ASPath
-            routes = self.get_shortest_as_path(routes)
+            #routes = self.get_shortest_as_path(routes)
             # 4. EGP > IGP > UNK
-            routes = self.get_origin_routes(routes)
+            #routes = self.get_origin_routes(routes)
             # 5. Lowest IP Address
             # TODO
             # Final check: enforce peering relationships
-            routes = self.filter_relationships(srcif, routes)
-        return self.sockets[peer] if peer else None
+            
+            routes = self.filter_relationships(recRelation, routes, src) 
+            return self.sockets[routes[0]["peer"]] 
 
     def forward(self, srcif, packet):
         """	Forward a data packet	"""
@@ -154,11 +171,11 @@ class Router:
         #print("PACKET FROM DATA: {0}".format(packet))
         #print("ROUTING TABLE IS: {0}".format(self.routes))
         dest = packet["dst"]
-        possible_routes = self.lookup_routes(dest)
-        chosen_router = possible_routes[0]["peer"]
+        chosen_router = self.get_route(srcif, dest)
         #TODO implement most specific route and business routes
+        outroutes = []
         #print("THIS IS FOR FORWARD:", json.dumps(packet).encode("ascii"))
-        self.sockets[chosen_router].send(json.dumps(packet).encode("ascii"))
+        chosen_router.send(json.dumps(packet).encode("ascii"))
         #return may need to be changed 
         return True
 
