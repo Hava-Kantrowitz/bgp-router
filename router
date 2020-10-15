@@ -54,7 +54,7 @@ class Router:
         self.updates = {}
         self.relations = {}
         self.sockets = {}
-        self.as_num = as_num
+        self.as_num = int(as_num)
         for relationship in networks:
             network, relation = relationship.split("-")
             if DEBUG: 
@@ -65,65 +65,95 @@ class Router:
             self.relations[network] = relation
         return
 
+    def print_table(self):
+        print("\nTable\n")
+        for route in self.routes:
+            print("peer:", route["peer"], "\nus:", route["us"], "\nvarats:")
+            for varat in route["varats"]:
+                print("    network:", varat["network"], " netmask:", varat["netmask"], 
+                      " localpref:", varat["localpref"], "\n    selfOrigin:", varat["selfOrigin"], 
+                      " ASPath:", varat["ASPath"], " origin:", varat["origin"], "\n")
+
     def lookup_routes(self, daddr):
         """ Lookup all valid routes for an address """
-        # TODO
         outroutes = []
         for entry in self.routes:
-            ip = entry["network"].split(".")
-            netmask = entry["netmask"].split(".")
-            #print("asdfasdfsadfsadfasdf", type(bin(5)))
+            for varat in entry["varats"]:
+                ip = varat["network"].split(".")
+                netmask = varat["netmask"].split(".")
 
-            mask_bit = "".join([ format(int(quad), "08b") for quad in netmask ])
-            num_ones = mask_bit.count("1")
-            #print("num ones: ", num_ones)
-            ip_bin = "".join([ format(int(quad), "08b") for quad in ip ])
-            ip_start = ip_bin[:num_ones]
-            #print("starttttttttttttttttttttt:", ip_start)
-            daddr_bin = "".join([ format(int(quad), "08b") for quad in daddr.split(".") ])
-            if daddr_bin.startswith(ip_start):
-                outroutes.append(entry)
+                mask_bit = "".join([ format(int(quad), "08b") for quad in netmask ])
+                num_ones = mask_bit.count("1")
+                #print("num ones: ", num_ones)
+                ip_bin = "".join([ format(int(quad), "08b") for quad in ip ])
+                ip_start = ip_bin[:num_ones]
+                #print("starttttttttttttttttttttt:", ip_start)
+                daddr_bin = "".join([ format(int(quad), "08b") for quad in daddr.split(".") ])
+                if daddr_bin.startswith(ip_start):
+                    outroutes.append({"peer": entry["peer"], "us": entry["us"], "msg": varat})
 
         #print("outroutessssssssssssssssssssss", outroutes)
         return outroutes
 
     def get_shortest_as_path(self, routes):
         """ select the route with the shortest AS Path """
-        # TODO
-        outroutes = []
+        if len(routes) == 0:
+            return []
+
+        min_len = min([ len(route["msg"]["ASPath"]) for route in routes ])
+        outroutes = [ route for route in routes if len(route["msg"]["ASPath"]) == min_len ]
         return outroutes
             
     def get_highest_preference(self, routes):
         """ select the route with the highest local pref """
-        # TODO
         prefList = []
         for val in routes: 
-            prefList.append(self.updates[val["peer"]]["msg"]["localpref"]) 
+            prefList.append(val["msg"]["localpref"]) 
         highestVal = max(prefList) 
         outroutes = []
         for val in routes:
-            if self.updates[val["peer"]]["msg"]["localpref"] == highestVal:
+            if val["msg"]["localpref"] == highestVal:
                 outroutes.append(val)
         return outroutes
          
     def get_self_origin(self, routes):
         """ select self originating routes """
-        # TODO
         outroutes = []
+        for route in routes:
+            if route["msg"]["selfOrigin"]:
+                outroutes.append(route)
+              
+        if len(outroutes) == 0:
+            outroutes = routes
+        
         return outroutes
 
     def get_origin_routes(self, routes):
-        """ select origin routes: EGP > IGP > UNK """
-        # TODO
+        """ select origin routes: IGP > EGP > UNK """
         outroutes = []
+        for route in routes:
+            if route["msg"]["origin"] == "IGP":
+                outroutes.append(route)
+
+        if len(outroutes) == 0:
+            for route in routes:
+                if route["msg"]["origin"] == "EGP":
+                    outroutes.append(route)
+
+            if len(outroutes) == 0:
+                outroutes = routes
+
         return outroutes
 
-    def filter_relationships(self, recRelation, routes, src):
+    def filter_relationships(self, recRelation, routes, src, is_forward=False):
         """ Don't allow Peer->Peer, Peer->Prov, or Prov->Peer forwards """
         outroutes = []
         #print("ROUTES IN FILTER ISSSSSSSSS:", routes)
-        if recRelation == CUST: 
-            for val in routes: 
+        if recRelation == CUST:
+            if is_forward:
+                return routes
+
+            for val in routes:
                 if val["peer"] != src: 
                     outroutes.append(val) 
             return outroutes
@@ -144,25 +174,39 @@ class Router:
     def get_route(self, srcif, daddr):
         """	Select the best route for a given address	"""
         # TODO
-        print("DADDR IS", daddr) 
         routes = self.lookup_routes(daddr)
-        print("ROUTES FROM LOOKUP IS", routes)
         if self.check_route_len(routes) != 100: 
             return self.check_route_len(routes) 
         else: 
             # 1. Highest Preference
             routes = self.get_highest_preference(routes)
+            #print("RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRROuteS:", routes)
             # 2. Self Origin
-            #routes = self.get_self_origin(routes)
+            routes = self.get_self_origin(routes)
             # 3. Shortest ASPath
-            #routes = self.get_shortest_as_path(routes)
+            routes = self.get_shortest_as_path(routes)
             # 4. EGP > IGP > UNK
-            #routes = self.get_origin_routes(routes)
+            routes = self.get_origin_routes(routes)
             # 5. Lowest IP Address
-            # TODO
+            if len(routes) not in (0, 1):
+                for i in range(0, 4):
+                    min_quads = []
+                    for route in routes:
+                        min_quads.append(route["peer"].split(".")[i])
+                    min_quad = min(min_quads)
+                    routes = [ route for route in routes if route["peer"].split(".")[i] == min_quad ]
             # Final check: enforce peering relationships
-            
-            routes = self.filter_relationships(recRelation, routes, src) 
+            if len(routes) == 0:
+                return None
+
+            #there should only be 1 route left at this point
+            peer_ip = routes[0]["peer"]
+            recRelation = self.relations[peer_ip]
+            routes = self.filter_relationships(recRelation, routes, peer_ip, True)
+            #print("routes", routes)
+            if len(routes) == 0:
+                return None
+
             return self.sockets[routes[0]["peer"]] 
 
     def forward(self, srcif, packet):
@@ -172,9 +216,12 @@ class Router:
         #print("ROUTING TABLE IS: {0}".format(self.routes))
         dest = packet["dst"]
         chosen_router = self.get_route(srcif, dest)
+        if chosen_router is None:
+            return False
+
         #TODO implement most specific route and business routes
         outroutes = []
-        #print("THIS IS FOR FORWARD:", json.dumps(packet).encode("ascii"))
+        print("THIS IS FOR FORWARD:", json.dumps(packet).encode("ascii"))
         chosen_router.send(json.dumps(packet).encode("ascii"))
         #return may need to be changed 
         return True
@@ -189,21 +236,34 @@ class Router:
         #print("WE ARE IN UPDATE!!")
         packet["msg"]["ASPath"].append(self.as_num) 
         self.updates[packet["src"]] = packet
-        self.routes.append({"network": packet["msg"]["network"],
-                            "netmask": packet["msg"]["netmask"], 
-                            "peer": packet["src"],
-                            "us": packet["dst"]})
+        message_added = False
+        for route in self.routes:
+            if packet["src"] == route["peer"]:
+                route["varats"].append(packet["msg"])
+                message_added = True
+                break
+
+        if not message_added:
+            self.routes.append({"peer": packet["src"],
+                                "us": packet["dst"],
+                                "varats": [packet["msg"]]})
         
         relation = packet["src"]
         recRelation = self.relations[relation]
         outRoutes = self.filter_relationships(recRelation, self.routes, relation)
         for item in outRoutes:
-            newpacket = {"src": item["us"], "dst": item["peer"], "type": "update", "msg": packet["msg"]} #sends incoming packet to a peer
+            newpacket = {"src": item["us"], "dst": item["peer"], "type": "update", 
+                         "msg": packet["msg"]} #sends incoming packet to a peer
             print("UPDATE TO OUTROUTE:", json.dumps(newpacket).encode("ascii"))
             self.sockets[item["peer"]].send(json.dumps(newpacket).encode("ascii"))
-            newpacket = {"src": packet["dst"], "dst": packet["src"], "type": "update", "msg": self.updates[item["peer"]]["msg"]} #send peer to incoming packet's router
-            print("UPDATE TO PACKET ROUTER:", json.dumps(newpacket).encode("ascii"))
-            self.sockets[packet["src"]].send(json.dumps(newpacket).encode("ascii"))
+
+        if not message_added:
+            for route in outRoutes:
+                for varat in route["varats"]:
+                    newpacket = {"src": packet["dst"], "dst": packet["src"], "type": "update", 
+                                 "msg": varat} #send peer to incoming packet's router
+                    print("UPDATE TO PACKET ROUTER:", json.dumps(newpacket).encode("ascii"))
+                    self.sockets[packet["src"]].send(json.dumps(newpacket).encode("ascii"))
 
         #    #the return true may need to be changed later
         return True
@@ -215,29 +275,27 @@ class Router:
 
     def dump(self, packet):
         """	handles dump table requests	"""
-        # TODO
-        #print("asdfffffffffffff")
+        #self.print_table()
         src = packet["dst"]
         dst = packet["src"]
-        a = {"src": src, "dst": dst, "type": "table", "msg": self.routes}
-        #print(a)
+        routes_dump = []
+        for route in self.routes:
+            for verat in route["varats"]:
+                routes_dump.append({"network": verat["network"], "netmask": verat["netmask"],
+                                    "peer": route["peer"]})
+        
+        a = {"src": src, "dst": dst, "type": "table", "msg": routes_dump}
         return a
 
     def handle_packet(self, srcif, packet):
         """	dispatches a packet """
-        #print("pckt type", packet["type"])
-        # TODO
         if packet["type"] == UPDT:
-            print(packet) 
             success = self.update(srcif, packet)
         elif packet["type"] == DATA:
             success = self.forward(srcif, packet)
         elif packet["type"] == DUMP:
-            #print("soijfioseejfioejfojeojw", srcif)
-            #print(self.dump(packet))
             #print("THIS IS DUMP", json.dumps(self.dump(packet)).encode("ascii"))
             self.sockets[srcif].send(json.dumps(self.dump(packet)).encode("ascii"))
-            #print("asdf")
         elif packet["type"] == RVKE:
             success = self.revoke(packet)
         elif packet["type"] == NRTE:
@@ -247,7 +305,8 @@ class Router:
 
     def send_error(self, conn, msg):
         """ Send a no_route error message """
-        # TODO
+        no_route = {"src": msg["dst"], "dst": msg["src"], "type": "no route", "msg": msg}
+        conn.send(json.dumps(no_route).encode("ascii"))
         return
 
     def run(self):
