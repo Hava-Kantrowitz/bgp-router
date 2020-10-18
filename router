@@ -159,14 +159,14 @@ class Router:
             for val in routes:
                 if val["peer"] != src: 
                     outroutes.append(val) 
-            print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", outroutes)
+            print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", src, outroutes)
             return outroutes
         for val in routes: 
             ip = val["peer"]
             relation = self.relations[ip] 
             if relation == CUST: 
                 outroutes.append(val)
-        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", outroutes)
+        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", src, outroutes)
         return outroutes
 
     def check_route_len(self, routes):
