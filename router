@@ -153,17 +153,20 @@ class Router:
         #print("ROUTES IN FILTER ISSSSSSSSS:", routes)
         if recRelation == CUST:
             if is_forward:
+                print("ghotiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", routes)
                 return routes
 
             for val in routes:
                 if val["peer"] != src: 
                     outroutes.append(val) 
+            print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", outroutes)
             return outroutes
         for val in routes: 
             ip = val["peer"]
             relation = self.relations[ip] 
             if relation == CUST: 
                 outroutes.append(val)
+        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", outroutes)
         return outroutes
 
     def check_route_len(self, routes):
@@ -212,7 +215,7 @@ class Router:
             return self.sockets[routes[0]["peer"]] 
 
     def forward(self, srcif, packet):
-        """	Forward a data packet	"""
+        """	Forward a data packet	"""        
         # TODO: will need to massively update this 
         #print("PACKET FROM DATA: {0}".format(packet))
         #print("ROUTING TABLE IS: {0}".format(self.routes))
@@ -276,7 +279,24 @@ class Router:
         print("WE ARE REVOKING")
         self.revokes.append(packet)
         deadRoutes = []
-         
+        for val in packet["msg"]:
+            for route in self.routes:
+                if packet["src"] == route["peer"]:
+                    new_varats = []
+                    for varat in route["varats"]:
+                        if not (val["network"] == varat["network"] and val["netmask"] == varat["netmask"]):
+                            new_varats.append(varat)
+
+                    route["varats"] = new_varats
+
+        relation = packet["src"]
+        recRelation = self.relations[relation]
+        outRoutes = self.filter_relationships(recRelation, self.routes, relation)
+
+        for route in outRoutes:
+            packet["src"] = route["us"]
+            packet["dst"] = route["peer"]
+            self.sockets[packet["dst"]].send(json.dumps(packet).encode("ascii"))
         
         return True
 
@@ -312,7 +332,7 @@ class Router:
 
     def send_error(self, conn, msg):
         """ Send a no_route error message """
-        no_route = {"src": msg["dst"], "dst": msg["src"], "type": "no route", "msg": msg}
+        no_route = {"src": msg["dst"], "dst": msg["src"], "type": "no route", "msg": {}}
         conn.send(json.dumps(no_route).encode("ascii"))
         return
 
