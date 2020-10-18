@@ -49,14 +49,14 @@ class Router:
     sockets = None
     as_num = None
     revokes = None
-
+    
     def __init__(self, networks, as_num):
         self.routes = []
-        self.updates = {}
+        self.updates = []
         self.relations = {}
         self.sockets = {}
         self.as_num = int(as_num)
-        self.revokes = {}
+        self.revokes = []
         for relationship in networks:
             network, relation = relationship.split("-")
             if DEBUG: 
@@ -237,7 +237,7 @@ class Router:
         """	handle update packets	"""
         #print("WE ARE IN UPDATE!!")
         packet["msg"]["ASPath"].append(self.as_num) 
-        self.updates[packet["src"]] = packet
+        self.updates.append(packet)
         message_added = False
         for route in self.routes:
             if packet["src"] == route["peer"]:
@@ -274,8 +274,7 @@ class Router:
         """	handle revoke packets	"""
         # TODO
         print("WE ARE REVOKING")
-        dead = packet["src"] 
-        self.revokes[dead] = packet["msg"] 
+        self.revokes.append(packet)
         deadRoutes = []
          
         
