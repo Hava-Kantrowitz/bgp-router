@@ -108,6 +108,10 @@ class Router:
             
     def get_highest_preference(self, routes):
         """ select the route with the highest local pref """
+        if len(routes) == 1: 
+            return routes
+        if len(routes) == 0: 
+            return None
         prefList = []
         for val in routes: 
             prefList.append(val["msg"]["localpref"]) 
@@ -151,27 +155,41 @@ class Router:
         """ Don't allow Peer->Peer, Peer->Prov, or Prov->Peer forwards """
         outroutes = []
         #print("ROUTES IN FILTER ISSSSSSSSS:", routes)
+        print("RECRELATION ISSSSSSSSSSSSSSSSSSSSSSS", recRelation) 
         if recRelation == CUST:
             if is_forward:
-                print("ghotiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", routes)
+                print("WE ARE A FORWARDING CUSTOMER")
+                #print("ghotiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", routes)
                 return routes
 
             for val in routes:
                 if val["peer"] != src: 
                     outroutes.append(val) 
-            print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", src, outroutes)
+            #print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", src, outroutes)
+            print("WE ARE A NON FORWARDING CUSTOMER") 
             return outroutes
         for val in routes: 
             ip = val["peer"]
             relation = self.relations[ip] 
+            print("RELATION ISSSSSSSSSSSSSSSS", relation, ip) 
             if relation == CUST: 
+                #print("HIIIIIIIIIIIIIIIIIIII", ip) 
+                print("WE ARE NOT CUST, BUT THEY ARE CUST", ip) 
                 outroutes.append(val)
-        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", src, outroutes)
+            else: 
+                print("WE ARE NOT CUST, THEY ARE NOT CUST", routes[0]["peer"], ip)
+        #print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", src, outroutes)
         return outroutes
 
     def check_route_len(self, routes):
         if len(routes) == 1:
-            return self.sockets[routes[0]["peer"]]
+            peer_ip = routes[0]["peer"] 
+            recRelation = self.relations[peer_ip] 
+            routes = self.filter_relationships(recRelation, routes, peer_ip, True)
+            if len(routes) == 0: 
+                return None
+            else:
+                return self.sockets[routes[0]["peer"]]
         elif len(routes) == 0: 
             return None
         return 100
@@ -180,39 +198,39 @@ class Router:
         """	Select the best route for a given address	"""
         # TODO
         routes = self.lookup_routes(daddr)
-        if self.check_route_len(routes) != 100: 
-            return self.check_route_len(routes) 
-        else: 
-            # 1. Highest Preference
-            routes = self.get_highest_preference(routes)
-            #print("RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRROuteS:", routes)
-            # 2. Self Origin
-            routes = self.get_self_origin(routes)
-            # 3. Shortest ASPath
-            routes = self.get_shortest_as_path(routes)
-            # 4. EGP > IGP > UNK
-            routes = self.get_origin_routes(routes)
-            # 5. Lowest IP Address
-            if len(routes) not in (0, 1):
-                for i in range(0, 4):
-                    min_quads = []
-                    for route in routes:
-                        min_quads.append(route["peer"].split(".")[i])
-                    min_quad = min(min_quads)
-                    routes = [ route for route in routes if route["peer"].split(".")[i] == min_quad ]
-            # Final check: enforce peering relationships
-            if len(routes) == 0:
-                return None
+        #if self.check_route_len(routes) != 100: 
+        #    return self.check_route_len(routes) 
+        #else: 
+        # 1. Highest Preference
+        routes = self.get_highest_preference(routes)
+        #print("RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRROuteS:", routes)
+        # 2. Self Origin
+        routes = self.get_self_origin(routes)
+        # 3. Shortest ASPath
+        routes = self.get_shortest_as_path(routes)
+        # 4. EGP > IGP > UNK
+        routes = self.get_origin_routes(routes)
+        # 5. Lowest IP Address
+        if len(routes) not in (0, 1):
+            for i in range(0, 4):
+                min_quads = []
+                for route in routes:
+                    min_quads.append(route["peer"].split(".")[i])
+                min_quad = min(min_quads)
+                routes = [ route for route in routes if route["peer"].split(".")[i] == min_quad ]
+        # Final check: enforce peering relationships
+        if len(routes) == 0:
+            return None
 
-            #there should only be 1 route left at this point
-            peer_ip = routes[0]["peer"]
-            recRelation = self.relations[peer_ip]
-            routes = self.filter_relationships(recRelation, routes, peer_ip, True)
-            #print("routes", routes)
-            if len(routes) == 0:
-                return None
+        #there should only be 1 route left at this point
+        print("SRCIFFFFFFFFFFFFFFFF IS", srcif) 
+        recRelation = self.relations[srcif]
+        routes = self.filter_relationships(recRelation, routes, srcif, True)
+        #print("RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRroutes", routes)
+        if len(routes) == 0:
+            return None
 
-            return self.sockets[routes[0]["peer"]] 
+        return self.sockets[routes[0]["peer"]] 
 
     def forward(self, srcif, packet):
         """	Forward a data packet	"""        
@@ -226,7 +244,8 @@ class Router:
 
         #TODO implement most specific route and business routes
         outroutes = []
-        print("THIS IS FOR FORWARD:", json.dumps(packet).encode("ascii"))
+        #print("CHOSEN ROUTER ISSSSSSSSSSSSSSSSSS", chosen_router) 
+        #print("THIS IS FOR FORWARD:", json.dumps(packet).encode("ascii"))
         chosen_router.send(json.dumps(packet).encode("ascii"))
         #return may need to be changed 
         return True
@@ -259,7 +278,7 @@ class Router:
         for item in outRoutes:
             newpacket = {"src": item["us"], "dst": item["peer"], "type": "update", 
                          "msg": packet["msg"]} #sends incoming packet to a peer
-            print("UPDATE TO OUTROUTE:", json.dumps(newpacket).encode("ascii"))
+            #print("UPDATE TO OUTROUTE:", json.dumps(newpacket).encode("ascii"))
             self.sockets[item["peer"]].send(json.dumps(newpacket).encode("ascii"))
 
         if not message_added:
@@ -267,7 +286,7 @@ class Router:
                 for varat in route["varats"]:
                     newpacket = {"src": packet["dst"], "dst": packet["src"], "type": "update", 
                                  "msg": varat} #send peer to incoming packet's router
-                    print("UPDATE TO PACKET ROUTER:", json.dumps(newpacket).encode("ascii"))
+             #       print("UPDATE TO PACKET ROUTER:", json.dumps(newpacket).encode("ascii"))
                     self.sockets[packet["src"]].send(json.dumps(newpacket).encode("ascii"))
 
         #    #the return true may need to be changed later
@@ -276,7 +295,7 @@ class Router:
     def revoke(self, packet):
         """	handle revoke packets	"""
         # TODO
-        print("WE ARE REVOKING")
+        #print("WE ARE REVOKING")
         self.revokes.append(packet)
         deadRoutes = []
         for val in packet["msg"]:
@@ -332,7 +351,10 @@ class Router:
 
     def send_error(self, conn, msg):
         """ Send a no_route error message """
-        no_route = {"src": msg["dst"], "dst": msg["src"], "type": "no route", "msg": {}}
+        print("THIS IS CONNNNNNNNNNNNNNNNNNNN", conn.getsockname(), conn.getpeername()) 
+        usIP = conn.getpeername()[:-1] + "1" 
+        print(usIP) 
+        no_route = {"src": usIP, "dst": msg["src"], "type": "no route", "msg": {}}
         conn.send(json.dumps(no_route).encode("ascii"))
         return
 
