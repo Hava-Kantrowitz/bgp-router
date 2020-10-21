@@ -194,6 +194,7 @@ class Router:
         #print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", src, outroutes)
         return outroutes
 
+    '''
     def check_route_len(self, routes):
         if len(routes) == 1:
             peer_ip = routes[0]["peer"] 
@@ -206,6 +207,7 @@ class Router:
         elif len(routes) == 0: 
             return None
         return 100
+    '''
 
     def get_route(self, srcif, daddr):
         """	Select the best route for a given address	"""
@@ -266,9 +268,23 @@ class Router:
         #return may need to be changed 
         return True
 
-    def coalesce(self):
+    def coalesce(self, packet):
         """	coalesce any routes that are right next to each other	"""
         # TODO (this is the most difficult task, save until last)
+        print("WE ARE COALESCING!!!!!!!!!!!!!!!!!!!") 
+        #three checks to determine if it can be coalesced 
+        for val in self.routes:
+            if val["peer"] == packet["src"]: 
+                #they are hop neighbors 
+                #check for same attributes 
+                potentialGhoti = []
+                for item in val["varats"]: 
+                    if item["localpref"] == packet["msg"]["localpref"] and item["selfOrigin"] == packet["msg"]["selfOrigin"] and sorted(item["ASPath"]) == sorted(packet["msg"]["ASPath"]) and item["origin"] == packet["msg"]["origin"]:
+                        potentialGhoti.append(item) 
+                #1 - adjacent numerically, come back to this later #TODO
+                #3 - have same attributes 
+                
+                 
         return False
     
     def update(self, srcif, packet):
@@ -306,6 +322,7 @@ class Router:
                     self.sockets[packet["src"]].send(json.dumps(newpacket).encode("ascii"))
 
         #    #the return true may need to be changed later
+        self.coalesce()
         return True
     
     def revoke(self, packet):
@@ -337,7 +354,7 @@ class Router:
 
     def dump(self, packet):
         """	handles dump table requests	"""
-        #self.print_table()
+        self.print_table()
         src = packet["dst"]
         dst = packet["src"]
         routes_dump = []
@@ -351,7 +368,7 @@ class Router:
 
     def handle_packet(self, srcif, packet):
         """	dispatches a packet """
-        print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbluub")
+        #print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbluub")
         if packet["type"] == UPDT:
             success = self.update(srcif, packet)
         elif packet["type"] == DATA:
