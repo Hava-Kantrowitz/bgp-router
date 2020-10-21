@@ -89,12 +89,12 @@ class Router:
                 #print("num ones: ", num_ones)
                 ip_bin = "".join([ format(int(quad), "08b") for quad in ip ])
                 ip_start = ip_bin[:num_ones]
-                #print("starttttttttttttttttttttt:", ip_start)
+                print("starttttttttttttttttttttt:", ip_start)
                 daddr_bin = "".join([ format(int(quad), "08b") for quad in daddr.split(".") ])
                 if daddr_bin.startswith(ip_start):
-                    outroutes.append({"peer": entry["peer"], "us": entry["us"], "msg": varat})
+                    outroutes.append({"peer": entry["peer"], "us": entry["us"], "ghoti": num_ones, "msg": varat})
 
-        #print("outroutessssssssssssssssssssss", outroutes)
+        print("outroutessssssssssssssssssssss", outroutes)
         return outroutes
 
     def get_shortest_as_path(self, routes):
@@ -151,14 +151,27 @@ class Router:
 
         return outroutes
 
+    def get_longest_prefix(self, routes):
+        max_ghoti = 0 #FYI - ghoti = longest prefix
+        for route in routes:
+            if route["ghoti"] > max_ghoti:
+                max_ghoti = route["ghoti"]
+
+        outroutes = []
+        for route in routes:
+            if route["ghoti"] == max_ghoti:
+                outroutes.append(route)
+
+        return outroutes
+
     def filter_relationships(self, recRelation, routes, src, is_forward=False):
         """ Don't allow Peer->Peer, Peer->Prov, or Prov->Peer forwards """
         outroutes = []
         #print("ROUTES IN FILTER ISSSSSSSSS:", routes)
-        print("RECRELATION ISSSSSSSSSSSSSSSSSSSSSSS", recRelation) 
+        #print("RECRELATION ISSSSSSSSSSSSSSSSSSSSSSS", recRelation) 
         if recRelation == CUST:
             if is_forward:
-                print("WE ARE A FORWARDING CUSTOMER")
+                #print("WE ARE A FORWARDING CUSTOMER")
                 #print("ghotiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", routes)
                 return routes
 
@@ -166,18 +179,18 @@ class Router:
                 if val["peer"] != src: 
                     outroutes.append(val) 
             #print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", src, outroutes)
-            print("WE ARE A NON FORWARDING CUSTOMER") 
+            #print("WE ARE A NON FORWARDING CUSTOMER") 
             return outroutes
         for val in routes: 
             ip = val["peer"]
             relation = self.relations[ip] 
-            print("RELATION ISSSSSSSSSSSSSSSS", relation, ip) 
+            #print("RELATION ISSSSSSSSSSSSSSSS", relation, ip) 
             if relation == CUST: 
                 #print("HIIIIIIIIIIIIIIIIIIII", ip) 
-                print("WE ARE NOT CUST, BUT THEY ARE CUST", ip) 
+                #print("WE ARE NOT CUST, BUT THEY ARE CUST", ip) 
                 outroutes.append(val)
-            else: 
-                print("WE ARE NOT CUST, THEY ARE NOT CUST", routes[0]["peer"], ip)
+            #else: 
+                #print("WE ARE NOT CUST, THEY ARE NOT CUST", routes[0]["peer"], ip)
         #print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", src, outroutes)
         return outroutes
 
@@ -210,7 +223,10 @@ class Router:
         routes = self.get_shortest_as_path(routes)
         # 4. EGP > IGP > UNK
         routes = self.get_origin_routes(routes)
-        # 5. Lowest IP Address
+        # 5. Longest ghoti matching
+        routes = self.get_longest_prefix(routes)
+        # 6. Lowest IP
+        
         if len(routes) not in (0, 1):
             for i in range(0, 4):
                 min_quads = []
@@ -218,12 +234,12 @@ class Router:
                     min_quads.append(route["peer"].split(".")[i])
                 min_quad = min(min_quads)
                 routes = [ route for route in routes if route["peer"].split(".")[i] == min_quad ]
-        # Final check: enforce peering relationships
+
         if len(routes) == 0:
             return None
-
+        # Final check: enforce peering relationships
         #there should only be 1 route left at this point
-        print("SRCIFFFFFFFFFFFFFFFF IS", srcif) 
+        #print("SRCIFFFFFFFFFFFFFFFF IS", srcif) 
         recRelation = self.relations[srcif]
         routes = self.filter_relationships(recRelation, routes, srcif, True)
         #print("RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRroutes", routes)
@@ -254,7 +270,7 @@ class Router:
         """	coalesce any routes that are right next to each other	"""
         # TODO (this is the most difficult task, save until last)
         return False
-
+    
     def update(self, srcif, packet):
         """	handle update packets	"""
         #print("WE ARE IN UPDATE!!")
@@ -335,6 +351,7 @@ class Router:
 
     def handle_packet(self, srcif, packet):
         """	dispatches a packet """
+        print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbluub")
         if packet["type"] == UPDT:
             success = self.update(srcif, packet)
         elif packet["type"] == DATA:
@@ -351,9 +368,9 @@ class Router:
 
     def send_error(self, conn, msg):
         """ Send a no_route error message """
-        print("THIS IS CONNNNNNNNNNNNNNNNNNNN", conn.getsockname(), conn.getpeername()) 
+        #print("THIS IS CONNNNNNNNNNNNNNNNNNNN", conn.getsockname(), conn.getpeername()) 
         usIP = conn.getpeername()[:-1] + "1" 
-        print(usIP) 
+        #print(usIP) 
         no_route = {"src": usIP, "dst": msg["src"], "type": "no route", "msg": {}}
         conn.send(json.dumps(no_route).encode("ascii"))
         return
