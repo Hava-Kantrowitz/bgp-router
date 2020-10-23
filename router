@@ -2,8 +2,8 @@
 
 import argparse, socket, time, json, select, struct, math
 
-DEBUG = True
-#DEBUG = False
+#DEBUG = True
+DEBUG = False
 
 parser = argparse.ArgumentParser(description='route packets')
 parser.add_argument('networks', metavar='networks', type=str, nargs='+', help="networks")
@@ -67,6 +67,7 @@ class Router:
             self.relations[network] = relation
         return
 
+    #Prints the routing table in an easy to understand format 
     def print_table(self):
         print("\nTable\n")
         for route in self.routes:
@@ -76,6 +77,7 @@ class Router:
                       " localpref:", varat["localpref"], "\n    selfOrigin:", varat["selfOrigin"], 
                       " ASPath:", varat["ASPath"], " origin:", varat["origin"], "\n")
 
+    #Takes in an address, and returns all valid routes for that address
     def lookup_routes(self, daddr):
         """ Lookup all valid routes for an address """
         outroutes = []
@@ -95,6 +97,7 @@ class Router:
         #print("outroutessssssssssssssssssssss", outroutes)
         return outroutes
 
+    #Takes in a list of routes, and returns the routes within the list that have the shortest AS Path
     def get_shortest_as_path(self, routes):
         """ select the route with the shortest AS Path """
         if len(routes) == 0:
@@ -104,6 +107,7 @@ class Router:
         outroutes = [ route for route in routes if len(route["msg"]["ASPath"]) == min_len ]
         return outroutes
             
+    #Takes in a list of routes, and returns the routes within the list that have the highest localpref value
     def get_highest_preference(self, routes):
         """ select the route with the highest local pref """
         if len(routes) == 1: 
@@ -120,6 +124,7 @@ class Router:
                 outroutes.append(val)
         return outroutes
          
+    #Takes in a list of routes, and returns the routes within the list that are self originating 
     def get_self_origin(self, routes):
         """ select self originating routes """
         outroutes = []
@@ -135,6 +140,7 @@ class Router:
         
         return outroutes
 
+    #Takes in a list of routes, and returns the best origin routes 
     def get_origin_routes(self, routes):
         """ select origin routes: IGP > EGP > UNK """
         outroutes = []
@@ -152,6 +158,7 @@ class Router:
 
         return outroutes
 
+    #Takes in a list of routes, and returns the routes with the most specific prefixes 
     def get_longest_prefix(self, routes):
         max_ghoti = 0 #FYI - ghoti = longest prefix
         for route in routes:
@@ -165,6 +172,7 @@ class Router:
 
         return outroutes
 
+    #Takes in the router's relationship with the route, a list of routes, the source of the route, and two booleans, determining whether we are or are not in a forwarding or updating situation. Enforces business rules, and returns the most profitable routes according to business specifications. 
     def filter_relationships(self, recRelation, routes, src, is_forward=False, is_update=False):
         """ Don't allow Peer->Peer, Peer->Prov, or Prov->Peer forwards """
         dict_entry = "src" if is_update else "peer"
@@ -186,7 +194,7 @@ class Router:
         
         return outroutes
 
-
+    #Takes in a src and an address, and returns the best route for the given address
     def get_route(self, srcif, daddr):
         """	Select the best route for a given address	"""
         routes = self.lookup_routes(daddr)
@@ -224,6 +232,7 @@ class Router:
 
         return self.sockets[routes[0]["peer"]] 
 
+    #Takes in a source and packet, and handles the forwarding of the packet 
     def forward(self, srcif, packet):
         """	Forward a data packet	"""        
         # TODO: will need to massively update this 
@@ -242,7 +251,7 @@ class Router:
         #return may need to be changed 
         return True
 
-
+    #Takes in an IP address and netmask, and returns the binary of the IP prefix
     def getIPPrefixBin(self, ip, netmask):
         ip = ip.split(".")
         ip_bin = "".join([ format(int(quad), "08b") for quad in ip ])
@@ -251,10 +260,11 @@ class Router:
         num_ones = mask_bin.count("1")
         return int(ip_bin[:num_ones])
 
+    #Takes in a packet, and handles the potential coalescing of that packet in the routing table
     def coalesce(self, packet):
         """	coalesce any routes that are right next to each other	"""
         # TODO (this is the most difficult task, save until last)
-        print("WE ARE COALESCING!!!!!!!!!!!!!!!!!!!") 
+        #print("WE ARE COALESCING!!!!!!!!!!!!!!!!!!!") 
         #three checks to determine if it can be coalesced 
         for neighbor in self.routes:
             if packet["msg"]["netmask"] != "0.0.0.0" and neighbor["peer"] == packet["src"]:
@@ -304,6 +314,7 @@ class Router:
 
         return True
     
+    #Takes in a src, a packet, and a boolean determining if the update is being called from the disagreggation function. Handles the updating for the given packet. 
     def update(self, srcif, packet, janky_bool=False):
         """	handle update packets	"""
         #print("WE ARE IN UPDATE!!")
@@ -344,8 +355,9 @@ class Router:
         self.coalesce(packet)
         return True
    
+    #Takes in an element, a neighbor, and a src, and handles the disagreggation of the element from the routing table
     def uncombine(self, element, neighbor, src):
-        print("WE ARE UNCOMBINING!!!!!!!!!!")
+        #print("WE ARE UNCOMBINING!!!!!!!!!!")
         updates_set = []
         revokes_set = []
         #print("SRC ISSSSSSSSSSSSS", src)
@@ -380,7 +392,7 @@ class Router:
             self.update(src, val, janky_bool)
         
         
- 
+    #Takes in a packet, and handles the revoking of that packet 
     def revoke(self, packet):
         """	handle revoke packets	"""
         #print("WE ARE REVOKING")
@@ -416,6 +428,7 @@ class Router:
 
         return True
 
+    #Takes in a packet, and handles the dump of the table as requested by the packet 
     def dump(self, packet):
         """	handles dump table requests	"""
         #self.print_table()
@@ -430,6 +443,7 @@ class Router:
         a = {"src": src, "dst": dst, "type": "table", "msg": routes_dump}
         return a
 
+    #Takes in a src and a packet, and dispatches the packet to the proper method 
     def handle_packet(self, srcif, packet):
         """	dispatches a packet """
         #print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbluub")
@@ -448,6 +462,7 @@ class Router:
         
         return success
 
+    #Takes in a socket and a message, and sends the proper no route error message 
     def send_error(self, conn, msg):
         """ Send a no_route error message """
         #print("THIS IS CONNNNNNNNNNNNNNNNNNNN", conn.getsockname(), conn.getpeername()) 
@@ -457,6 +472,7 @@ class Router:
         conn.send(json.dumps(no_route).encode("ascii"))
         return
 
+    #Handles the overall running of the BGP router 
     def run(self):
         while True:
             socks = select.select(self.sockets.values(), [], [], 0.1)[0]
