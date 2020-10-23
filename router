@@ -304,7 +304,7 @@ class Router:
 
         return True
     
-    def update(self, srcif, packet):
+    def update(self, srcif, packet, janky_bool=False):
         """	handle update packets	"""
         #print("WE ARE IN UPDATE!!")
         packet["msg"]["ASPath"].append(self.as_num)
@@ -322,41 +322,88 @@ class Router:
                                 "us": packet["dst"],
                                 "varats": [packet["msg"]]})
         
-        relation = packet["src"]
-        recRelation = self.relations[relation]
-        outRoutes = self.filter_relationships(recRelation, self.routes, relation)
-        for item in outRoutes:
-            newpacket = {"src": item["us"], "dst": item["peer"], "type": "update", 
-                         "msg": packet["msg"]} #sends incoming packet to a peer
-            #print("UPDATE TO OUTROUTE:", json.dumps(newpacket).encode("ascii"))
-            self.sockets[item["peer"]].send(json.dumps(newpacket).encode("ascii"))
+        if not janky_bool:
+            relation = packet["src"]
+            recRelation = self.relations[relation]
+            outRoutes = self.filter_relationships(recRelation, self.routes, relation)
+            for item in outRoutes:
+                newpacket = {"src": item["us"], "dst": item["peer"], "type": "update", 
+                             "msg": packet["msg"]} #sends incoming packet to a peer
+                #print("UPDATE TO OUTROUTE:", json.dumps(newpacket).encode("ascii"))
+                self.sockets[item["peer"]].send(json.dumps(newpacket).encode("ascii"))
 
         
         
-        outRoutes = self.filter_relationships(recRelation, self.updates, relation, is_update=True)
+            outRoutes = self.filter_relationships(recRelation, self.updates, relation, is_update=True)
         
-        if not message_added:
-            for update in outRoutes:
-                new_packet = {"src": packet["dst"], "dst": packet["src"], "type": "update", "msg": update["msg"]}
-                self.sockets[srcif].send(json.dumps(new_packet).encode("ascii")) #send peer to incoming packet's router
+            if not message_added:
+                for update in outRoutes:
+                    new_packet = {"src": packet["dst"], "dst": packet["src"], "type": "update", "msg": update["msg"]}
+                    self.sockets[srcif].send(json.dumps(new_packet).encode("ascii")) #send peer to incoming packet's router
         
         self.coalesce(packet)
         return True
-    
+   
+    def uncombine(self, element, neighbor, src):
+        print("WE ARE UNCOMBINING!!!!!!!!!!")
+        updates_set = []
+        revokes_set = []
+        #print("SRC ISSSSSSSSSSSSS", src)
+        #print("OLD UPDATESSSSSSSSSSS", self.updates)
+        for val in self.updates:
+         #   print("VAL SRC ISSSSSSSSSSSSSS", val["src"])
+         #   print("ELT NETWORK ISSSSSS", element["network"])
+         #   print("VAL NETWORK ISSSSS", val["msg"]["network"]) 
+         #   print("ELT NETMASK ISSSSSSSS", element["netmask"])
+         #   print("VAL NETMASK ISSSSSSS", val["msg"]["netmask"])
+            if (src == val["src"] and (element["network"] != val["msg"]["network"] or element["netmask"] != val["msg"]["netmask"])):
+                updates_set.append(val)
+        for val in self.revokes: 
+            if src == val["src"]: 
+                revokes_set.append(val)
+        #print("NEWWWWWWWWWWWW UPDATES", updates_set)
+        #print("NEWWWWWWWWWWWWWWW REVOKESSSSS", revokes_set)  
+        final_updates = []
+        for val in updates_set:
+            belongs = True  
+            for val2 in revokes_set: 
+                if val["msg"]["network"] == val2["network"] and val["msg"]["netmask"] == val2["netmask"]:
+                    belongs = False
+            if belongs: 
+                final_updates.append(val)
+        #print("UPDATES ISSSS", final_updates)
+        for val in self.routes: 
+            if src == val["peer"]: 
+                val["varats"] = []
+        for val in final_updates: 
+            janky_bool = True 
+            self.update(src, val, janky_bool)
+        
+        
+ 
     def revoke(self, packet):
         """	handle revoke packets	"""
         #print("WE ARE REVOKING")
-        self.revokes.append(packet)
+        for item in packet["msg"]:
+            new_dict = {"src": packet["src"], "dst": packet["dst"], "network": item["network"], "netmask": item["netmask"]}
+            self.revokes.append(new_dict)
         deadRoutes = []
         for val in packet["msg"]:
             for route in self.routes:
                 if packet["src"] == route["peer"]:
-                    new_varats = []
-                    for varat in route["varats"]:
-                        if not (val["network"] == varat["network"] and val["netmask"] == varat["netmask"]):
-                            new_varats.append(varat)
+                    matches = False
+                    for varat in route["varats"]: 
+                        if (val["network"] == varat["network"] and val["netmask"] == varat["netmask"]):
+                           matches = True
+                    if not matches: 
+                        self.uncombine(val, route, packet["src"])
+                    else:  
+                        new_varats = []
+                        for varat in route["varats"]:
+                            if not (val["network"] == varat["network"] and val["netmask"] == varat["netmask"]):
+                                new_varats.append(varat)
 
-                    route["varats"] = new_varats
+                        route["varats"] = new_varats
 
         relation = packet["src"]
         recRelation = self.relations[relation]
@@ -366,7 +413,7 @@ class Router:
             packet["src"] = route["us"]
             packet["dst"] = route["peer"]
             self.sockets[packet["dst"]].send(json.dumps(packet).encode("ascii"))
-        
+
         return True
 
     def dump(self, packet):
