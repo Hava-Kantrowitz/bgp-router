@@ -86,15 +86,13 @@ class Router:
 
                 mask_bit = "".join([ format(int(quad), "08b") for quad in netmask ])
                 num_ones = mask_bit.count("1")
-                #print("num ones: ", num_ones)
                 ip_bin = "".join([ format(int(quad), "08b") for quad in ip ])
                 ip_start = ip_bin[:num_ones]
-                print("starttttttttttttttttttttt:", ip_start)
                 daddr_bin = "".join([ format(int(quad), "08b") for quad in daddr.split(".") ])
                 if daddr_bin.startswith(ip_start):
                     outroutes.append({"peer": entry["peer"], "us": entry["us"], "ghoti": num_ones, "msg": varat})
 
-        print("outroutessssssssssssssssssssss", outroutes)
+        #print("outroutessssssssssssssssssssss", outroutes)
         return outroutes
 
     def get_shortest_as_path(self, routes):
@@ -167,58 +165,31 @@ class Router:
 
         return outroutes
 
-    def filter_relationships(self, recRelation, routes, src, is_forward=False):
+    def filter_relationships(self, recRelation, routes, src, is_forward=False, is_update=False):
         """ Don't allow Peer->Peer, Peer->Prov, or Prov->Peer forwards """
+        dict_entry = "src" if is_update else "peer"
         outroutes = []
-        #print("ROUTES IN FILTER ISSSSSSSSS:", routes)
-        #print("RECRELATION ISSSSSSSSSSSSSSSSSSSSSSS", recRelation) 
         if recRelation == CUST:
             if is_forward:
-                #print("WE ARE A FORWARDING CUSTOMER")
-                #print("ghotiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", routes)
                 return routes
 
             for val in routes:
-                if val["peer"] != src: 
+                if val[dict_entry] != src: 
                     outroutes.append(val) 
-            #print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", src, outroutes)
-            #print("WE ARE A NON FORWARDING CUSTOMER") 
+
             return outroutes
         for val in routes: 
-            ip = val["peer"]
+            ip = val[dict_entry]
             relation = self.relations[ip] 
-            #print("RELATION ISSSSSSSSSSSSSSSS", relation, ip) 
             if relation == CUST: 
-                #print("HIIIIIIIIIIIIIIIIIIII", ip) 
-                #print("WE ARE NOT CUST, BUT THEY ARE CUST", ip) 
                 outroutes.append(val)
-            #else: 
-                #print("WE ARE NOT CUST, THEY ARE NOT CUST", routes[0]["peer"], ip)
-        #print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", src, outroutes)
+        
         return outroutes
 
-    '''
-    def check_route_len(self, routes):
-        if len(routes) == 1:
-            peer_ip = routes[0]["peer"] 
-            recRelation = self.relations[peer_ip] 
-            routes = self.filter_relationships(recRelation, routes, peer_ip, True)
-            if len(routes) == 0: 
-                return None
-            else:
-                return self.sockets[routes[0]["peer"]]
-        elif len(routes) == 0: 
-            return None
-        return 100
-    '''
 
     def get_route(self, srcif, daddr):
         """	Select the best route for a given address	"""
-        # TODO
         routes = self.lookup_routes(daddr)
-        #if self.check_route_len(routes) != 100: 
-        #    return self.check_route_len(routes) 
-        #else: 
         # 1. Highest Preference
         routes = self.get_highest_preference(routes)
         #print("RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRROuteS:", routes)
@@ -271,101 +242,74 @@ class Router:
         #return may need to be changed 
         return True
 
-    def combine(self, varat1, varat2):
-        ip1 = varat1["network"].split(".")
-        netmask1 = varat1["netmask"].split(".")
 
-        mask_bit1 = "".join([ format(int(quad), "08b") for quad in netmask1 ])
-        num_ones1 = mask_bit1.count("1")
-        #print("num ones: ", num_ones)
-        ip_bin1 = "".join([ format(int(quad), "08b") for quad in ip1 ])
-        ip_start1 = ip_bin1[:num_ones1]
-
-        ip2 = varat2["network"].split(".")
-        netmask2 = varat2["netmask"].split(".")
-
-        mask_bit2 = "".join([ format(int(quad), "08b") for quad in netmask2 ])
-        num_ones2 = mask_bit2.count("1")
-        #print("num ones: ", num_ones)
-        ip_bin2 = "".join([ format(int(quad), "08b") for quad in ip2 ])
-        ip_start2 = ip_bin2[:num_ones2]
-
-        if int(ip_start2) - int(ip_start1) == 1:
-            new_mask_bit = mask_bit1[:num_ones1] + "1" + mask_bit1[num_ones1 + 1:]
-            print(new_mask_bit)
-            #new_netmask = str(int(new_mask_bit, 2))
-            #print(new_netmask)
-            new_netmask_decimal = []
-            for i in range(0, 4):
-                new_netmask_decimal.append(str(int(new_mask_bit[i*8:(i+1)*8], 2)))
-                print(new_mask_bit[i*8:(i+1)*8])
-            #new_netmask = []
-            #num_ones1 += 1
-            #while num_ones1 > 0:
-            #    if num_ones1 > 7:
-            #        new_netmask.append("255")
-            #        num_ones1 -= 8
-            #    else:
-            #        new_netmask.append(str(int(mask_bit1[:num_ones1],2)))
-            #        print(mask_bit1[:num_ones1])
-            #        print(int(mask_bit1[:num_ones1],2))
-            #        print(str(int(mask_bit1[:num_ones1],2)))
-            #        num_ones1 = 0
-   
-            #while len(new_netmask) != 4:
-            #    new_netmask.append("0")
-
-            new_varat = {"network": varat1["network"], 
-                         "netmask": ".".join(new_netmask_decimal), 
-                         "localpref": varat1["localpref"], 
-                         "selfOrigin": varat1["selfOrigin"], 
-                         "ASPath": varat1["ASPath"], 
-                         "origin": varat1["origin"]}
-            return new_varat
-        else:
-            return None
+    def getIPPrefixBin(self, ip, netmask):
+        ip = ip.split(".")
+        ip_bin = "".join([ format(int(quad), "08b") for quad in ip ])
+        netmask = netmask.split(".")
+        mask_bin = "".join([ format(int(quad), "08b") for quad in netmask ])
+        num_ones = mask_bin.count("1")
+        return int(ip_bin[:num_ones])
 
     def coalesce(self, packet):
         """	coalesce any routes that are right next to each other	"""
         # TODO (this is the most difficult task, save until last)
         print("WE ARE COALESCING!!!!!!!!!!!!!!!!!!!") 
         #three checks to determine if it can be coalesced 
-        for val in self.routes:
-            if val["peer"] == packet["src"]: 
-                #they are hop neighbors 
-                #check for same attributes 
-                potentialGhoti = []
-                for item in val["varats"]: 
-                    if item["netmask"] == packet["msg"]["netmask"] and item["localpref"] == packet["msg"]["localpref"] and item["selfOrigin"] == packet["msg"]["selfOrigin"] and sorted(item["ASPath"]) == sorted(packet["msg"]["ASPath"]) and item["origin"] == packet["msg"]["origin"]:
-                        potentialGhoti.append(item) 
-                #1 - adjacent numerically, come back to this later #TODO
-                #3 - have same attributes 
-                sorted_networks = [ varat["network"] for varat in potentialGhoti ]
-                sorted_networks.sort()
-                if len(potentialGhoti) > 1:
-                    new_varat = self.combine(potentialGhoti[0], potentialGhoti[1])
-                    if new_varat is not None:
-                        del val["varats"][1]
-                        del val["varats"][0]
-                        val["varats"].append(new_varat)
+        for neighbor in self.routes:
+            if packet["msg"]["netmask"] != "0.0.0.0" and neighbor["peer"] == packet["src"]:
+                pckt_msg = packet["msg"]
+                loop_again = True
+                while loop_again:
+                    #they are hop neighbors 
+                    #check for same attributes
+                    loop_again = False
+                    potentialGhoti = []
+                    for item in neighbor["varats"]: 
+                        if (item["netmask"] == pckt_msg["netmask"] 
+                            and item["localpref"] == pckt_msg["localpref"] 
+                            and item["selfOrigin"] == pckt_msg["selfOrigin"] 
+                            and sorted(item["ASPath"]) == sorted(pckt_msg["ASPath"]) 
+                            and item["origin"] == pckt_msg["origin"]):
+                            potentialGhoti.append(item) 
 
-                #for i, network in range(sorted_networks):
-                #    for ghoti in potentialGhoti:
-                #        if ghoti["network"] == network:
-                #            varat1 = ghoti
-                #        if ghoti["network"] == sorted_networks[i + 1]:
-                #            varat2 = ghoti
+                    pckt_prefix = self.getIPPrefixBin(pckt_msg["network"], pckt_msg["netmask"])
+                    for ghoti in potentialGhoti:
+                        ghoti_prefix = self.getIPPrefixBin(ghoti["network"], ghoti["netmask"])
+                        if pckt_prefix - ghoti_prefix in (-1, 1):
+                            netmask = ghoti["netmask"].split(".")
+                            mask_bin = "".join([ format(int(quad), "08b") for quad in netmask ])
+                            num_ones = mask_bin.count("1")
+                            new_mask_bin = mask_bin[:num_ones - 1] + "0" + mask_bin[num_ones:]
+                            new_netmask_decimal = []
+                            for i in range(0, 4):
+                                new_netmask_decimal.append(str(int(new_mask_bin[i*8:(i+1)*8], 2)))
+                            
+                            min_varat = pckt_msg if pckt_prefix < ghoti_prefix else ghoti
+                            new_varat = {"network": min_varat["network"],
+                                         "netmask": ".".join(new_netmask_decimal),
+                                         "localpref": min_varat["localpref"],
+                                         "selfOrigin": min_varat["selfOrigin"],
+                                         "ASPath": min_varat["ASPath"],
+                                         "origin": min_varat["origin"]}
 
-                #    new_varat = combine(varat1, varat2)
-                #    val
-                        
-        return False
+                            new_varats = [new_varat]
+                            for varat in neighbor["varats"]:
+                                if varat["network"] not in (pckt_msg["network"], ghoti["network"]):
+                                    new_varats.append(varat)
+                            
+                            neighbor["varats"] = new_varats
+                            pckt_msg = new_varat
+                            loop_again = True
+
+        return True
     
     def update(self, srcif, packet):
         """	handle update packets	"""
         #print("WE ARE IN UPDATE!!")
-        packet["msg"]["ASPath"].append(self.as_num) 
+        packet["msg"]["ASPath"].append(self.as_num)
         self.updates.append(packet)
+        
         message_added = False
         for route in self.routes:
             if packet["src"] == route["peer"]:
@@ -387,21 +331,20 @@ class Router:
             #print("UPDATE TO OUTROUTE:", json.dumps(newpacket).encode("ascii"))
             self.sockets[item["peer"]].send(json.dumps(newpacket).encode("ascii"))
 
+        
+        
+        outRoutes = self.filter_relationships(recRelation, self.updates, relation, is_update=True)
+        
         if not message_added:
-            for route in outRoutes:
-                for varat in route["varats"]:
-                    newpacket = {"src": packet["dst"], "dst": packet["src"], "type": "update", 
-                                 "msg": varat} #send peer to incoming packet's router
-             #       print("UPDATE TO PACKET ROUTER:", json.dumps(newpacket).encode("ascii"))
-                    self.sockets[packet["src"]].send(json.dumps(newpacket).encode("ascii"))
-
-        #    #the return true may need to be changed later
+            for update in outRoutes:
+                new_packet = {"src": packet["dst"], "dst": packet["src"], "type": "update", "msg": update["msg"]}
+                self.sockets[srcif].send(json.dumps(new_packet).encode("ascii")) #send peer to incoming packet's router
+        
         self.coalesce(packet)
         return True
     
     def revoke(self, packet):
         """	handle revoke packets	"""
-        # TODO
         #print("WE ARE REVOKING")
         self.revokes.append(packet)
         deadRoutes = []
@@ -428,7 +371,7 @@ class Router:
 
     def dump(self, packet):
         """	handles dump table requests	"""
-        self.print_table()
+        #self.print_table()
         src = packet["dst"]
         dst = packet["src"]
         routes_dump = []
@@ -450,6 +393,7 @@ class Router:
         elif packet["type"] == DUMP:
             #print("THIS IS DUMP", json.dumps(self.dump(packet)).encode("ascii"))
             self.sockets[srcif].send(json.dumps(self.dump(packet)).encode("ascii"))
+            success = True
         elif packet["type"] == RVKE:
             success = self.revoke(packet)
         elif packet["type"] == NRTE:
@@ -492,7 +436,6 @@ class Router:
         return
 
 if __name__ == "__main__":
-    #print(args.networks[1:])
     as_num = args.networks[0]
     router = Router(args.networks[1:], as_num)
     router.run()
