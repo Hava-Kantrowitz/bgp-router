@@ -111,7 +111,7 @@ class Router:
         if len(routes) == 1: 
             return routes
         if len(routes) == 0: 
-            return None
+            return []
         prefList = []
         for val in routes: 
             prefList.append(val["msg"]["localpref"]) 
@@ -125,6 +125,9 @@ class Router:
     def get_self_origin(self, routes):
         """ select self originating routes """
         outroutes = []
+        if len(routes) == 0:
+            return routes
+
         for route in routes:
             if route["msg"]["selfOrigin"]:
                 outroutes.append(route)
@@ -268,6 +271,60 @@ class Router:
         #return may need to be changed 
         return True
 
+    def combine(self, varat1, varat2):
+        ip1 = varat1["network"].split(".")
+        netmask1 = varat1["netmask"].split(".")
+
+        mask_bit1 = "".join([ format(int(quad), "08b") for quad in netmask1 ])
+        num_ones1 = mask_bit1.count("1")
+        #print("num ones: ", num_ones)
+        ip_bin1 = "".join([ format(int(quad), "08b") for quad in ip1 ])
+        ip_start1 = ip_bin1[:num_ones1]
+
+        ip2 = varat2["network"].split(".")
+        netmask2 = varat2["netmask"].split(".")
+
+        mask_bit2 = "".join([ format(int(quad), "08b") for quad in netmask2 ])
+        num_ones2 = mask_bit2.count("1")
+        #print("num ones: ", num_ones)
+        ip_bin2 = "".join([ format(int(quad), "08b") for quad in ip2 ])
+        ip_start2 = ip_bin2[:num_ones2]
+
+        if int(ip_start2) - int(ip_start1) == 1:
+            new_mask_bit = mask_bit1[:num_ones1] + "1" + mask_bit1[num_ones1 + 1:]
+            print(new_mask_bit)
+            #new_netmask = str(int(new_mask_bit, 2))
+            #print(new_netmask)
+            new_netmask_decimal = []
+            for i in range(0, 4):
+                new_netmask_decimal.append(str(int(new_mask_bit[i*8:(i+1)*8], 2)))
+                print(new_mask_bit[i*8:(i+1)*8])
+            #new_netmask = []
+            #num_ones1 += 1
+            #while num_ones1 > 0:
+            #    if num_ones1 > 7:
+            #        new_netmask.append("255")
+            #        num_ones1 -= 8
+            #    else:
+            #        new_netmask.append(str(int(mask_bit1[:num_ones1],2)))
+            #        print(mask_bit1[:num_ones1])
+            #        print(int(mask_bit1[:num_ones1],2))
+            #        print(str(int(mask_bit1[:num_ones1],2)))
+            #        num_ones1 = 0
+   
+            #while len(new_netmask) != 4:
+            #    new_netmask.append("0")
+
+            new_varat = {"network": varat1["network"], 
+                         "netmask": ".".join(new_netmask_decimal), 
+                         "localpref": varat1["localpref"], 
+                         "selfOrigin": varat1["selfOrigin"], 
+                         "ASPath": varat1["ASPath"], 
+                         "origin": varat1["origin"]}
+            return new_varat
+        else:
+            return None
+
     def coalesce(self, packet):
         """	coalesce any routes that are right next to each other	"""
         # TODO (this is the most difficult task, save until last)
@@ -279,12 +336,29 @@ class Router:
                 #check for same attributes 
                 potentialGhoti = []
                 for item in val["varats"]: 
-                    if item["localpref"] == packet["msg"]["localpref"] and item["selfOrigin"] == packet["msg"]["selfOrigin"] and sorted(item["ASPath"]) == sorted(packet["msg"]["ASPath"]) and item["origin"] == packet["msg"]["origin"]:
+                    if item["netmask"] == packet["msg"]["netmask"] and item["localpref"] == packet["msg"]["localpref"] and item["selfOrigin"] == packet["msg"]["selfOrigin"] and sorted(item["ASPath"]) == sorted(packet["msg"]["ASPath"]) and item["origin"] == packet["msg"]["origin"]:
                         potentialGhoti.append(item) 
                 #1 - adjacent numerically, come back to this later #TODO
                 #3 - have same attributes 
-                
-                 
+                sorted_networks = [ varat["network"] for varat in potentialGhoti ]
+                sorted_networks.sort()
+                if len(potentialGhoti) > 1:
+                    new_varat = self.combine(potentialGhoti[0], potentialGhoti[1])
+                    if new_varat is not None:
+                        del val["varats"][1]
+                        del val["varats"][0]
+                        val["varats"].append(new_varat)
+
+                #for i, network in range(sorted_networks):
+                #    for ghoti in potentialGhoti:
+                #        if ghoti["network"] == network:
+                #            varat1 = ghoti
+                #        if ghoti["network"] == sorted_networks[i + 1]:
+                #            varat2 = ghoti
+
+                #    new_varat = combine(varat1, varat2)
+                #    val
+                        
         return False
     
     def update(self, srcif, packet):
@@ -322,7 +396,7 @@ class Router:
                     self.sockets[packet["src"]].send(json.dumps(newpacket).encode("ascii"))
 
         #    #the return true may need to be changed later
-        self.coalesce()
+        self.coalesce(packet)
         return True
     
     def revoke(self, packet):
